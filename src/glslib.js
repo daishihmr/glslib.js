@@ -218,7 +218,7 @@ glslib.Sprite.prototype._draw = function(gl) {
     status[7] = this.texScale;
     status[8] = this.alpha;
     gl.uniformMatrix4fv(this.uniforms["status"], false, status);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
 
     if (this.glow > 0) {
         gl.bindTexture(gl.TEXTURE_2D, glslib.Sprite.glowTexture);
@@ -229,7 +229,7 @@ glslib.Sprite.prototype._draw = function(gl) {
         status[7] = 8;
         status[8] = this.glow;
         gl.uniformMatrix4fv(this.uniforms["status"], false, status);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
     }
 };
 
@@ -392,14 +392,18 @@ var VERTICES = [
     -1,  1, 0,
     -1, -1, 0,
      1,  1, 0,
-     1, -1, 0
+    -1, -1, 0,
+     1, -1, 0,
+     1,  1, 0
 ];
 
 var TEXTURE_COORDS = [
     0, 0,
     0, 64/512,
     64/512, 0,
-    64/512, 64/512
+    0, 64/512,
+    64/512, 64/512,
+    64/512, 0
 ];
 
 var VERTEX_SHADER = "\n\
