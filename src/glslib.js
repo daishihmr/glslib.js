@@ -1,13 +1,13 @@
 /** @namespace */
 var glslib = {};
 
-(function(mat4, undefined) {
+(function(vec2, mat2d, mat4, undefined) {
 
 /**
  * @constructor
  * @param {HTMLCanvasElement} canvas
  */
-glslib.Scene = function(canvas) {
+glslib.Scene = function(canvas, image) {
     /** @type {WebGLRenderingContext} */
     this.gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
 
@@ -27,28 +27,29 @@ glslib.Scene = function(canvas) {
         createShader(gl, "vs", VERTEX_SHADER),
         createShader(gl, "fs", FRAGMENT_SHADER));
 
-    var attrPosition = gl.getAttribLocation(program, "position");
-    var positionBuffer = createVbo(gl, VERTICES);
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.enableVertexAttribArray(attrPosition);
-    gl.vertexAttribPointer(attrPosition, 3, gl.FLOAT, false, 0, 0);
+    this.attrPosition = gl.getAttribLocation(this.program, "position");
+    gl.enableVertexAttribArray(this.attrPosition);
+    this.verticesBuffer = createBuffer(gl);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.verticesBuffer);
+    gl.vertexAttribPointer(this.attrPosition, 2, gl.FLOAT, false, 0, 0);
 
-    var attrTexCoord = gl.getAttribLocation(program, "texCoord");
-    var texCoordBuffer = createVbo(gl, TEXTURE_COORDS);
-    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-    gl.enableVertexAttribArray(attrTexCoord);
-    gl.vertexAttribPointer(attrTexCoord, 2, gl.FLOAT, false, 0, 0);
+    this.attrTexCoord = gl.getAttribLocation(this.program, "texCoord");
+    gl.enableVertexAttribArray(this.attrTexCoord);
+    this.texCoordsBuffer = createBuffer(gl);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordsBuffer);
+    gl.vertexAttribPointer(this.attrTexCoord, 2, gl.FLOAT, false, 0, 0);
+
+    this.verticesData = [];
+    this.texCoordsData = [];
 
     this.viewMat = mat4.identity(mat4.create());
     this.projMat = mat4.identity(mat4.create());
 
-    mat4.lookAt([0,0,16], [0,0,0], [0,1,0], this.viewMat)
-    mat4.ortho(-16, 16, -16, 16, 0.1, 32, this.projMat);
+    mat4.lookAt(this.viewMat, [0,0,16], [0,0,0], [0,1,0])
+    mat4.ortho(this.projMat, -16, 16, -16, 16, 0.1, 32);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.uniform1f(gl.getUniformLocation(program, "texture"), 0);
-
-    this.uniformLocationsForSprite = getUniformLocationsForSprite(gl, program, ["status"]);
 
     this.updateMatrix();
 
@@ -59,7 +60,7 @@ glslib.Scene = function(canvas) {
 
     this.update = function() {};
 
-    this.createGlowTexture();
+    this.texture = glslib.createTexture(gl, image);
 };
 
 /**
@@ -67,7 +68,7 @@ glslib.Scene = function(canvas) {
  */
 glslib.Scene.prototype.updateMatrix = function() {
     var temp = mat4.create();
-    mat4.multiply(this.projMat, this.viewMat, temp);
+    mat4.multiply(temp, this.projMat, this.viewMat);
     this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "pvMat"), false, temp);
 };
 
@@ -92,6 +93,9 @@ glslib.Scene.prototype._update = function() {
     removedChildren.splice(0);
 
     this.frame += 1;
+
+    this.v = new Float32Array(50000*6*2);
+    this.t = new Float32Array(50000*6*2);
 };
 
 /**
@@ -100,13 +104,33 @@ glslib.Scene.prototype._update = function() {
 glslib.Scene.prototype._draw = function() {
     var children = this.children;
     var gl = this.gl;
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    var verticesData = this.verticesData;
+    var texCoordsData = this.texCoordsData;
 
     for (var i = 0, len = children.length; i < len; i++) {
-        children[i]._draw(gl);
+        children[i]._draw(gl, verticesData, texCoordsData);
     }
 
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    gl.bindTexture(gl.TEXTURE_2D, this.texture);
+
+    this.v.set(verticesData);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.verticesBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, this.v.subarray(0, verticesData.length), gl.STATIC_DRAW);
+
+    this.t.set(texCoordsData);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordsBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, this.t.subarray(0, texCoordsData.length), gl.STATIC_DRAW);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+    gl.drawArrays(gl.TRIANGLES, 0, verticesData.length * 0.5);
+
     gl.flush();
+
+    verticesData.splice(0);
+    texCoordsData.splice(0);
 };
 
 /**
@@ -160,7 +184,7 @@ glslib.Layer = function() {
  * @constructor
  * @param {WebGLTexture=} texture
  */
-glslib.Sprite = function(texture) {
+glslib.Sprite = function() {
     this.age = 0;
     this.parent = null;
 
@@ -179,14 +203,6 @@ glslib.Sprite = function(texture) {
     this.alpha = 1;
     this.glow = 0;
 
-    this.texture = null;
-    if (texture) {
-        this.texture = texture;
-    }
-
-    this.uniforms = {};
-    this.status = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
-
     this.update = function() {};
     this.onremoved = function() {};
 };
@@ -200,37 +216,38 @@ glslib.Sprite.prototype._update = function() {
 };
 
 /**
+ * cell size.
+ */
+var CS = 64/512;
+/**
  * @param {WebGLRenderingContext} gl
  */
-glslib.Sprite.prototype._draw = function(gl) {
+glslib.Sprite.prototype._draw = function(gl, v, uv) {
     if (!this.visible) return;
 
-    gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    var mat = transform([this.x, this.y], [this.scaleX, this.scaleY], this.rotation);
 
-    var status = this.status;
-    status[0] = this.x;
-    status[1] = this.y;
-    status[2] = this.scaleX;
-    status[3] = this.scaleY;
-    status[4] = this.rotation;
-    status[5] = this.texX;
-    status[6] = this.texY;
-    status[7] = this.texScale;
-    status[8] = this.alpha;
-    gl.uniformMatrix4fv(this.uniforms["status"], false, status);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-    if (this.glow > 0) {
-        gl.bindTexture(gl.TEXTURE_2D, glslib.Sprite.glowTexture);
-        status[2] = this.scaleX * 2;
-        status[3] = this.scaleY * 2;
-        status[5] = 0;
-        status[6] = 0;
-        status[7] = 8;
-        status[8] = this.glow;
-        gl.uniformMatrix4fv(this.uniforms["status"], false, status);
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
+    for (var i = 0; i < 6; i++) {
+        var vertex = [ VERTICES[i*2], VERTICES[i*2+1] ];
+        vec2.transformMat2d(vertex, vertex, mat);
+        v[v.length] = vertex[0];
+        v[v.length] = vertex[1];
     }
+
+    uv[uv.length] = (this.texX+0)*CS; uv[uv.length] = (this.texY+0)*CS;
+    uv[uv.length] = (this.texX+0)*CS; uv[uv.length] = (this.texY+1)*CS;
+    uv[uv.length] = (this.texX+1)*CS; uv[uv.length] = (this.texY+0)*CS;
+    uv[uv.length] = (this.texX+0)*CS; uv[uv.length] = (this.texY+1)*CS;
+    uv[uv.length] = (this.texX+1)*CS; uv[uv.length] = (this.texY+1)*CS;
+    uv[uv.length] = (this.texX+1)*CS; uv[uv.length] = (this.texY+0)*CS;
+};
+
+var transform = function(t, s, r) {
+    var m = mat2d.identity(mat2d.create());
+    mat2d.scale(m, m, s);
+    mat2d.rotate(m, m, r);
+    mat2d.translate(m, m, t);
+    return m;
 };
 
 /**
@@ -314,14 +331,16 @@ glslib.Pool.prototype.dispose = function(obj) {
 
 /**
  * @param {WebGLRenderingContext} gl
- * @param {Array.<number>} data
+ * @param {Array.<number>=} data
  */
-function createVbo(gl, data) {
-    var vbo = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+function createBuffer(gl, data) {
+    var buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    if (data !== undefined) {
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+    }
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    return vbo;
+    return buffer;
 }
 
 /**
@@ -375,26 +394,13 @@ function createShader(gl, type, script) {
     }
 }
 
-/**
- * @param {WebGLRenderingContext} gl
- * @param {WebGLProgram} program
- * @param {Array.<string>} names
- */
-function getUniformLocationsForSprite(gl, program, names) {
-    var result = {};
-    names.map(function(name) {
-        result[name] = gl.getUniformLocation(program, name);
-    });
-    return result;
-}
-
 var VERTICES = [
-    -1,  1, 0,
-    -1, -1, 0,
-     1,  1, 0,
-    -1, -1, 0,
-     1, -1, 0,
-     1,  1, 0
+    -1,  1,
+    -1, -1,
+     1,  1,
+    -1, -1,
+     1, -1,
+     1,  1
 ];
 
 var TEXTURE_COORDS = [
@@ -410,42 +416,13 @@ var VERTEX_SHADER = "\n\
 attribute vec3 position;\n\
 attribute vec2 texCoord;\n\
 uniform mat4 pvMat;\n\
-uniform mat4 status;\n\
 varying vec2 vTextureCoord;\n\
 varying float vAlpha;\n\
 \n\
-mat4 model(vec2 xy, vec2 scale, float rot) {\n\
-    mat4 result = mat4(\n\
-        1.0, 0.0, 0.0, 0.0,\n\
-        0.0, 1.0, 0.0, 0.0,\n\
-        0.0, 0.0, 1.0, 0.0,\n\
-        0.0, 0.0, 0.0, 1.0\n\
-    );\n\
-    result = result * mat4(\n\
-        1.0, 0.0, 0.0, 0.0,\n\
-        0.0, 1.0, 0.0, 0.0,\n\
-        0.0, 0.0, 1.0, 0.0,\n\
-        xy.x, xy.y, 0.0, 1.0\n\
-    );\n\
-    result = result * mat4(\n\
-        scale.x, 0.0, 0.0, 0.0,\n\
-        0.0, scale.y, 0.0, 0.0,\n\
-        0.0, 0.0, 1.0, 0.0,\n\
-        0.0, 0.0, 0.0, 1.0\n\
-    );\n\
-    result = result * mat4(\n\
-        cos(radians(rot)), -sin(radians(rot)), 0.0, 0.0,\n\
-        sin(radians(rot)), cos(radians(rot)), 0.0, 0.0,\n\
-        0.0, 0.0, 1.0, 0.0,\n\
-        0.0, 0.0, 0.0, 1.0\n\
-    );\n\
-    return result;\n\
-}\n\
-\n\
 void main(void) {\
-    vAlpha = status[2][0];\n\
-    vTextureCoord = vec2(status[1][1]*0.125, status[1][2]*0.125) + (texCoord * status[1][3]);\n\
-    gl_Position = pvMat * model(vec2(status[0][0], status[0][1]), vec2(status[0][2], status[0][3]), status[1][0]) * vec4(position, 1.0);\n\
+    vAlpha = 1.0;\n\
+    vTextureCoord = texCoord;\n\
+    gl_Position = pvMat * vec4(position, 1.0);\n\
 }\n\
 ";
 
@@ -458,7 +435,11 @@ varying float vAlpha;\n\
 \n\
 void main(void) {\n\
     vec4 col = texture2D(texture, vTextureCoord);\n\
-    gl_FragColor = clamp(vec4(col.rgb, col.a * vAlpha), 0.0, 1.0);\n\
+    if (col.a == 0.0 || vAlpha == 0.0) {\n\
+        discard;\n\
+    } else {\n\
+        gl_FragColor = clamp(vec4(col.rgb, col.a * vAlpha), 0.0, 1.0);\n\
+    }\n\
 }\n\
 ";
 
@@ -488,4 +469,4 @@ EfW2WllCAZUfiuf7vD01cs1vcw8D3DqU7xmd2ikPbcLO01ikZNepS9z4emNgU7Nf1xH0+MpOERNXpedy
 I3ZLH/2I/NJblhnw9OJiDY6dnXo7MOIirG7BNja2qxUeGye/TWzwvrbz27DGZCZ+/9i4/P/wHZcraVmgBTv\
 QAAAABJRU5ErkJggg==";
 
-})(mat4);
+})(vec2, mat2d, mat4);

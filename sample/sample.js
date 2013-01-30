@@ -28,12 +28,12 @@ var main = function(images) {
 
     var canvas = document.getElementById("world");
     glslib.fitWindow(canvas);
-    var scene = new glslib.Scene(canvas);
+    var scene = new glslib.Scene(canvas, images["texture.png"]);
     var gl = scene.gl;
     var textures = glslib.createTextures(gl, images);
 
     var spritePool = new glslib.Pool(function() {
-        var sprite = new glslib.Sprite(textures["texture.png"]);
+        var sprite = new glslib.Sprite();
         sprite.texX = 1;
         sprite.texY = 1;
         sprite.scaleX = sprite.scaleY = 0.5;
@@ -49,18 +49,19 @@ var main = function(images) {
         return sprite;
     }, 1000)
 
+    var u = Math.PI*2/12;
     scene.update = function() {
-        for (var i = 0; i < 4; i++) {
+        for (var i = 0; i < 12; i++) {
             var sprite = spritePool.get();
             sprite.x = 0;
             sprite.y = 0;
-            sprite.d = scene.frame*0.1 + Math.PI*0.5*i;
+            sprite.d = scene.frame*0.1 + u*i;
             scene.addChild(sprite);
 
             sprite = spritePool.get();
             sprite.x = 0;
             sprite.y = 0;
-            sprite.d = scene.frame*-0.1 + Math.PI*0.5*i;
+            sprite.d = scene.frame*-0.1 + u*i;
             scene.addChild(sprite);
         }
     };
