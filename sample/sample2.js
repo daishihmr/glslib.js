@@ -37,11 +37,12 @@ var main = function(images) {
         sprite.texX = 2;
         sprite.texY = 0;
         sprite.scaleX = sprite.scaleY = 2;
-        sprite.glow = 0.5;
+        sprite.glow = 0.2;
         sprite.d = 0;
         sprite.update = function() {
             this.x += Math.cos(this.d) * 0.1;
             this.y += Math.sin(this.d) * 0.1;
+            this.rotation += 0.1;
             if (this.x < -17 || 17 < this.x || this.y < -17 || 17 < this.y) {
                 scene.removeChild(this);
                 spritePool.dispose(this);

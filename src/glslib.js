@@ -18,7 +18,7 @@ glslib.Scene = function(canvas) {
         throw new Error("failed initialize WebGL.");
     }
 
-    gl.clearColor(0, 0, 0, 1);
+    gl.clearColor(0, 0, 0, 0);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
 
@@ -224,6 +224,7 @@ glslib.Sprite.prototype._draw = function(gl) {
         gl.bindTexture(gl.TEXTURE_2D, glslib.Sprite.glowTexture);
         status[2] = this.scaleX * 2;
         status[3] = this.scaleY * 2;
+        status[4] = 0;
         status[5] = 0;
         status[6] = 0;
         status[7] = 8;
