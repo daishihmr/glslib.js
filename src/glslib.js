@@ -66,12 +66,9 @@ glslib.Scene = function(canvas) {
  * 
  */
 glslib.Scene.prototype.updateMatrix = function() {
-    var gl = this.gl;
-    var program = this.program;
-
     var temp = mat4.create();
     mat4.multiply(this.projMat, this.viewMat, temp);
-    gl.uniformMatrix4fv(gl.getUniformLocation(program, "pvMat"), false, temp);
+    this.gl.uniformMatrix4fv(this.gl.getUniformLocation(this.program, "pvMat"), false, temp);
 };
 
 /**
@@ -103,7 +100,6 @@ glslib.Scene.prototype._update = function() {
 glslib.Scene.prototype._draw = function() {
     var children = this.children;
     var gl = this.gl;
-    var program = this.program;
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     for (var i = 0, len = children.length; i < len; i++) {
@@ -141,6 +137,9 @@ glslib.Scene.prototype.removeChild = function(sprite) {
     sprite.onremoved();
 };
 
+/**
+ *
+ */
 glslib.Scene.prototype.createGlowTexture = function() {
     var gl = this.gl;
     var image = new Image();
@@ -148,6 +147,13 @@ glslib.Scene.prototype.createGlowTexture = function() {
     image.onload = function() {
         glslib.Sprite.glowTexture = glslib.createTexture(gl, this);
     };
+};
+
+/**
+ * @constructor
+ */
+glslib.Layer = function() {
+
 };
 
 /**
@@ -201,27 +207,28 @@ glslib.Sprite.prototype._draw = function(gl) {
 
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
 
-    this.status[0] = this.x;
-    this.status[1] = this.y;
-    this.status[2] = this.scaleX;
-    this.status[3] = this.scaleY;
-    this.status[4] = this.rotation;
-    this.status[5] = this.texX;
-    this.status[6] = this.texY;
-    this.status[7] = this.texScale;
-    this.status[8] = this.alpha;
-    gl.uniformMatrix4fv(this.uniforms["status"], false, this.status);
+    var status = this.status;
+    status[0] = this.x;
+    status[1] = this.y;
+    status[2] = this.scaleX;
+    status[3] = this.scaleY;
+    status[4] = this.rotation;
+    status[5] = this.texX;
+    status[6] = this.texY;
+    status[7] = this.texScale;
+    status[8] = this.alpha;
+    gl.uniformMatrix4fv(this.uniforms["status"], false, status);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     if (this.glow > 0) {
         gl.bindTexture(gl.TEXTURE_2D, glslib.Sprite.glowTexture);
-        this.status[2] = this.scaleX * 2;
-        this.status[3] = this.scaleY * 2;
-        this.status[5] = 0;
-        this.status[6] = 0;
-        this.status[7] = 8;
-        this.status[8] = this.glow;
-        gl.uniformMatrix4fv(this.uniforms["status"], false, this.status);
+        status[2] = this.scaleX * 2;
+        status[3] = this.scaleY * 2;
+        status[5] = 0;
+        status[6] = 0;
+        status[7] = 8;
+        status[8] = this.glow;
+        gl.uniformMatrix4fv(this.uniforms["status"], false, status);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
 };
