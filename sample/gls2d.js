@@ -17,6 +17,8 @@ glslib.Scene = function(canvas) {
     this.frame = 0;
 
     this.update = function() {};
+
+    console.log("2d scene created.");
 };
 
 /**

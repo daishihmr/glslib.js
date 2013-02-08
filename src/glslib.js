@@ -60,6 +60,8 @@ glslib.Scene = function(canvas) {
     this.update = function() {};
 
     this.createGlowTexture();
+
+    console.log("2d scene created.");
 };
 
 /**
@@ -228,7 +230,7 @@ glslib.Sprite.prototype._draw = function(gl) {
         status[5] = 0;
         status[6] = 0;
         status[7] = 8;
-        status[8] = this.glow;
+        status[8] = this.glow * 0.5;
         gl.uniformMatrix4fv(this.uniforms["status"], false, status);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
